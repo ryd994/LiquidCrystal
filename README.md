@@ -1,0 +1,2 @@
+# LiquidCrystal
+Accelerator for KanKolle
