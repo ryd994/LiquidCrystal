@@ -73,7 +73,7 @@ def application(environ, start_response):
         start_response( str(server_result.status), response_header.items() )
         return [ server_result.data ]
     else:
-        response_header = [ (k.encode('ascii'),v.encode('ascii')) for k,v in cache['response']['header'].items() ]
+        response_header = [ (k.encode('iso-8859-1'),v.encode('iso-8859-1')) for k,v in cache['response']['header'].items() ]
         response_header.append( ('X-CrystalACG-Cache','HIT') )
         start_response( str(cache['response']['status']), response_header )
         return [ cache['response']['content'] ]
