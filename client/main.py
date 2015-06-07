@@ -59,7 +59,7 @@ class LiquidHandler(http.server.BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    daemon = socketserver.ThreadingTCPServer(('127.0.0.1',8002),LiquidHandler)
+    daemon = socketserver.ThreadingTCPServer(('127.0.0.1',PORT),LiquidHandler)
     try:
         print('\nYour server is ready at :%s'%PORT)
         daemon.serve_forever()
