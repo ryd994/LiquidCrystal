@@ -1,2 +1,2 @@
 # LiquidCrystal
-Accelerator for KanKolle
+Accelerator for KanColle
