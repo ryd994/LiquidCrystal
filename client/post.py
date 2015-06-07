@@ -28,9 +28,9 @@ def content(wfile, response):
     else:
         for chunk in response.stream(2**20):
             if response.chunked:
-                self.wfile.write( ('%x\r\n'%len(chunk)).encode('iso-8859-1') + chunk + b'\r\n' )
+                wfile.write( ('%x\r\n'%len(chunk)).encode('iso-8859-1') + chunk + b'\r\n' )
             else:
-                self.wfile.write(chunk)
+                wfile.write(chunk)
     return response.tell()
     
     
