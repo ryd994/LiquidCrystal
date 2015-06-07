@@ -39,10 +39,6 @@ class LiquidHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(502)
             self.end_headers()
             self.close_connection = 1
-        if not response:
-            self.send_response(502)
-            self.end_headers()
-            self.close_connection = 1
         
         self.send_response_only(response.status)
         for header in response.getheaders():
@@ -52,7 +48,8 @@ class LiquidHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         
         byte_count = post.content(self.wfile, response)
-        self.log_request(response.status,byte_count)
+        
+        self.log_request(response.status, byte_count)
         
     
     do_OPTIONS = do_GET = do_HEAD = do_DELETE = do_PUT = do_POST

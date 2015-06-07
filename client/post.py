@@ -27,11 +27,12 @@ def content(wfile, response):
         wfile.write(response.data)
     else:
         for chunk in response.stream(2**20):
-            if response.chunked:
-                wfile.write( ('%x\r\n'%len(chunk)).encode('iso-8859-1') + chunk + b'\r\n' )
-            else:
-                wfile.write(chunk)
+            try:
+                if response.chunked:
+                    wfile.write( ('%x\r\n'%len(chunk)).encode('iso-8859-1') + chunk + b'\r\n' )
+                else:
+                    wfile.write(chunk)
+            except BrokenPipeError:
+                response.close()
+                break
     return response.tell()
-    
-    
-    
