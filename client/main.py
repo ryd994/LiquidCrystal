@@ -15,18 +15,22 @@ class LiquidHandler(http.server.BaseHTTPRequestHandler):
         return 'LiquidCrystal/0.1'
     
     def do_CONNECT(self):
-        socket_toremote = connect.connect(self.path)
-        if socket_toremote:
-            self.send_response_only(200)
-            self.send_header('Proxy-agent',self.version_string())
-            self.end_headers()
-            
-            byte_count = connect.content( self.connection, socket_toremote )
-            
-            self.log_request(200,byte_count)
-        else:
+        try:
+            socket_toremote = connect.connect(self.path)
+        except socket.error:
             self.send_response(502)
             self.end_headers()
+            self.close_connection = 1
+            return
+        
+        self.send_response_only(200)
+        self.send_header('Proxy-Agent',self.version_string())
+        self.end_headers()
+        
+        byte_count = connect.content( self.connection, socket_toremote )
+        
+        self.log_request(200,byte_count)
+           
             
     def do_POST(self):
         try:
@@ -35,22 +39,22 @@ class LiquidHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(504)
             self.end_headers()
             self.close_connection = 1
+            return
         except (ConnectionError,urllib3.exceptions.HTTPError):
             self.send_response(502)
             self.end_headers()
             self.close_connection = 1
+            return
         
         self.send_response_only(response.status)
-        for header in response.getheaders():
-            if header.lower() != 'connection':
-                self.send_header(header, response.getheader(header))
-        self.send_header('Connection','keep-alive')
+        for k,v in response.getheaders().items():
+            self.send_header(k, v)
         self.end_headers()
         
         byte_count = post.content(self.wfile, response)
         
         self.log_request(response.status, byte_count)
-        
+    
     
     do_OPTIONS = do_GET = do_HEAD = do_DELETE = do_PUT = do_POST
 
