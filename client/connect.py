@@ -11,31 +11,31 @@ def connect(remote_host, remote_port=None):
             remote_port = int(remote_port)
         except ValueError:
             remote_port = 80
-    try:
-        socket_toremote.connect((remote_host,remote_port))
-        socket_toremote.setblocking(False)
-        return socket_toremote
-    except socket.error:
-        return None
+    socket_toremote.connect((remote_host,remote_port))
+    return socket_toremote
 
 def content(socket_toclient,socket_toremote):
+    socket_toclient.setblocking(False)
+    socket_toremote.setblocking(False)
     rf = [socket_toclient,socket_toremote]
-    wf = []
     byte_count = 0
     data = True
     dst = { socket_toremote: socket_toclient,
             socket_toclient: socket_toremote }
     while data:
-        (rlst,_,errlst) = select.select(rf,wf,rf,TIMEOUT)
+        (rlst,_,errlst) = select.select(rf,[],rf,TIMEOUT)
         if errlst:
             break
         if rlst:
             for src in rlst:
                 try:
                     data = src.recv(BLOCK_SIZE)
+                    dst[src].setblocking(True)
                     dst[src].sendall(data)
+                    dst[src].setblocking(False)
                 except ConnectionResetError:
                     return byte_count
                 byte_count += len(data)
+    socket_toremote.close()
     return byte_count
 
