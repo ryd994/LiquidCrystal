@@ -11,7 +11,7 @@ Collection = pymongo.MongoClient('mongodb:///var/run/mongodb/mongodb-27017.sock'
 def application(environ, start_response):
     client_ip = struct.unpack('i',environ['BINARY_REMOTE_ADDR'])[0] # unpacked as signed_int32,
                                                                     # so that we can save space in mongo
-    _,time,host,path = environ['REQUEST_URI'].split('/',4)
+    _,time,host,path = environ['REQUEST_URI'].split('/',3)
     
     client_time = datetime.utcfromtimestamp(float(time)) # should be safe, rely on datetime constructor
     if abs((datetime.utcnow()-client_time).total_seconds()) > 5000:
