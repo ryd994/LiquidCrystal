@@ -4,7 +4,7 @@ import pymongo
 from datetime import datetime
 from urllib3.poolmanager import PoolManager
 
-HTTPPool = PoolManager( num_pools=30, maxsize=20 )
+HTTPPool = PoolManager( num_pools=30, maxsize=20,timeout=5, retries=False, )
 Collection = pymongo.MongoClient('mongodb:///var/run/mongodb/mongodb-27017.sock',
                                  tz_aware=True).kancache.kancache
 
@@ -47,13 +47,14 @@ def application(environ, start_response):
             url     = '/'.join( ('http:/',host,path) ),
             body    = request_body,
             headers = request_headers,
-            retries = 0, 
+            retries = False, 
             preload_content =True,
             decode_content  =True, 
             )
         response_header = { k: v
                             for k,v in server_result.getheaders().items()
-                            if k.upper() not in ('TRANSFER-ENCODING','CONTENT-ENCODING') }
+                            if k.upper() not in ('TRANSFER-ENCODING','CONTENT-ENCODING','CONTENT-LENGTH') }
+        response_header['Content-Length'] = len(server_result.data)
         Collection.insert( {
             'url'       :environ['REQUEST_URI'],
             'client_ip' :client_ip,
@@ -68,7 +69,6 @@ def application(environ, start_response):
                 'content'   :bson.binary.Binary(server_result.data),
                 },
             } )
-        
         response_header['X-CrystalACG-Cache'] = 'MISS'
         start_response( str(server_result.status), response_header.items() )
         return [ server_result.data ]
