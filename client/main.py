@@ -47,7 +47,7 @@ class LiquidHandler(http.server.BaseHTTPRequestHandler):
             return
         
         self.send_response_only(response.status)
-        for k,v in response.getheaders().items():
+        for k,v in response.headers.items():
             self.send_header(k, v)
         self.end_headers()
         
