@@ -1,5 +1,5 @@
 import socket
-import select
+from select import select
 
 from config import TIMEOUT,BLOCK_SIZE
 
@@ -23,7 +23,7 @@ def content(socket_toclient,socket_toremote):
     dst = { socket_toremote: socket_toclient,
             socket_toclient: socket_toremote }
     while data:
-        (rlst,_,errlst) = select.select(rf,[],rf,TIMEOUT)
+        (rlst,_,errlst) = select(rf,[],rf,TIMEOUT)
         if errlst:
             break
         if rlst:
