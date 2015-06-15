@@ -1,7 +1,8 @@
 import struct
 import bson
 import pymongo
-from datetime import datetime
+from datetime import datetime,utcfromtimestamp,utcnow
+from time import time
 from urllib3.poolmanager import PoolManager
 
 HTTPPool = PoolManager( num_pools=30, maxsize=20,timeout=5, retries=False, )
@@ -11,19 +12,14 @@ Collection = pymongo.MongoClient('mongodb:///var/run/mongodb/mongodb-27017.sock'
 def application(environ, start_response):
     client_ip = struct.unpack('i',environ['BINARY_REMOTE_ADDR'])[0] # unpacked as signed_int32,
                                                                     # so that we can save space in mongo
-    _,time,host,path = environ['REQUEST_URI'].split('/',3)
-    
-    client_time = datetime.utcfromtimestamp(float(time)) # should be safe, rely on datetime constructor
-    if abs((datetime.utcnow()-client_time).total_seconds()) > 5000:
-        # if time is too far away, terminate
-        start_response(str(400),[])
-        return [ '' ]
+    _,client_time,host,path = environ['REQUEST_URI'].split('/',3)
+    client_time = float(client_time)
     
     cache = Collection.find_one(
         {
-            'url'       :environ['REQUEST_URI'],
+            'url'       :'/'.join((host,path)),
             'client_ip' :client_ip,
-            'time'      :client_time,
+            'client_time':client_time,
         },
         {
             '_id'       :False,
@@ -56,9 +52,10 @@ def application(environ, start_response):
                             if k.upper() not in ('TRANSFER-ENCODING','CONTENT-ENCODING','CONTENT-LENGTH') }
         response_header['Content-Length'] = len(server_result.data)
         Collection.insert( {
-            'url'       :environ['REQUEST_URI'],
+            'url'       :'/'.join( (host,path) ),
             'client_ip' :client_ip,
-            'time'      :client_time,
+            'client_time':client_time,
+            'time'      :utcnow()
             'request'   :{
                 'header'    :request_headers,
                 'content'   :bson.binary.Binary(request_body),
