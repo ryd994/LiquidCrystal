@@ -1,18 +1,28 @@
 #!/usr/bin/python3
 
-import socketserver
-import http.server
+import SocketServer
+import BaseHTTPServer
 import urllib3.exceptions
 
 from config import PORT
 import connect
 import post
 
-class LiquidHandler(http.server.BaseHTTPRequestHandler):
+class LiquidHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
     
     def version_string(self):
         return 'LiquidCrystal/0.1'
+    
+    def send_response_only(self, code, message=None):
+        if message is None:
+            if code in self.responses:
+                message = self.responses[code][0]
+            else:
+                message = ''
+        if self.request_version != 'HTTP/0.9':
+            self.wfile.write("%s %d %s\r\n" %
+                            (self.protocol_version, code, message))
     
     def do_CONNECT(self):
         try:
@@ -35,16 +45,16 @@ class LiquidHandler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             response = post.connect(self)
-        except (TimeoutError,urllib3.exceptions.TimeoutError):
+        except (urllib3.exceptions.TimeoutError):
             self.send_response(504)
             self.end_headers()
             self.close_connection = 1
             return
-        except (ConnectionError,urllib3.exceptions.HTTPError):
+        except (urllib3.exceptions.HTTPError):
             self.send_response(502)
             self.end_headers()
             self.close_connection = 1
-            return
+            raise
         
         self.send_response_only(response.status)
         for k,v in response.headers.items():
@@ -60,7 +70,7 @@ class LiquidHandler(http.server.BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    daemon = socketserver.ThreadingTCPServer(('127.0.0.1',PORT),LiquidHandler)
+    daemon = SocketServer.ThreadingTCPServer(('127.0.0.1',PORT),LiquidHandler)
     try:
         print('\nYour server is ready at :%s'%PORT)
         daemon.serve_forever()

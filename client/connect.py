@@ -33,7 +33,7 @@ def content(socket_toclient,socket_toremote):
                     dst[src].setblocking(True)
                     dst[src].sendall(data)
                     dst[src].setblocking(False)
-                except ConnectionResetError:
+                except:
                     return byte_count
                 byte_count += len(data)
     socket_toremote.close()

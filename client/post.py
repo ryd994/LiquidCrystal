@@ -4,8 +4,8 @@ import os
 import stat
 import email.utils
 from copy import copy
-from urllib.parse import urlsplit,urlunsplit,parse_qs
-from datetime import datetime,timezone
+from urlparse import urlsplit,urlunsplit,parse_qs
+from datetime import datetime
 from time import time
 
 
@@ -47,7 +47,7 @@ def connect(self):
         url = urlunsplit((API_PROTOCOL, API_SERVER,
                           '/{0:.3f}/{1}{2}'.format(time(), url[1], url[2]),
                           url[3], url[4]))
-        request_headers.replace_header('Host',API_SERVER)
+        request_headers['Host'] = API_SERVER
         
         response = HTTP_POOL.urlopen (
             method  = self.command,
@@ -66,7 +66,7 @@ def connect(self):
     
     elif re.match(CACHE_PATTERN, self.path):
         url = urlsplit(self.path)
-        query = parse_qs(url[3])
+        query = {k.lower():v for k,v in parse_qs(url[3]).items()}
         
         cache_name = url[2].rpartition('.')     #cache_name[2] is extension
         hacked_path= '.'.join(('',cache_name[0],'hack',cache_name[2]))
@@ -97,8 +97,10 @@ def connect(self):
                 preload_content = True,
                 decode_content  = False,
                 )
-            
-            os.makedirs(os.path.dirname(cache_path),exist_ok=True)
+            try:
+                os.makedirs(os.path.dirname(cache_path))
+            except OSError:
+                pass
             
             with open(cache_path,'wb') as cache_file:
                 cache_file.write(response.data)
@@ -113,26 +115,17 @@ def connect(self):
             response.close()    # close response so that content() can know data is preloaded
     
     else:
-        try:
-            # set nonblocking mode for client connection will prevent httplib block for empty body
-            # assuming this is a local server, so that local network is not the bottleneck
-            request_timeout = self.connection.gettimeout()
-            self.connection.setblocking(False)
-            
-            response = HTTP_POOL.urlopen (
-                method  = self.command,
-                url     = self.path,
-                body    = self.rfile,
-                headers = dict(request_headers.items()),
-                timeout = TIMEOUT,
-                retries = False,
-                release_conn    = False,
-                preload_content = False,
-                decode_content  = False,
-                )
-        finally:
-            # remember to reset timeout of client connection. refer to beginning of this try block
-            self.connection.settimeout(request_timeout)
+        response = HTTP_POOL.urlopen (
+            method  = self.command,
+            url     = self.path,
+            body    = self.rfile.read( int(request_headers.get('Content-Length',0)) ) or None,
+            headers = dict(request_headers.items()),
+            timeout = TIMEOUT,
+            #retries = False,
+            release_conn    = False,
+            preload_content = False,
+            decode_content  = False,
+            )
     
     response.headers['Connection'] = 'keep-alive'
     return response
