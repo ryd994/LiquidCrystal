@@ -70,7 +70,11 @@ class LiquidHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    daemon = SocketServer.ThreadingTCPServer(('127.0.0.1',PORT),LiquidHandler)
+    daemon = SocketServer.ThreadingTCPServer(('127.0.0.1',PORT),LiquidHandler,bind_and_activate=False)
+    daemon.allow_reuse_address = True
+    daemon.server_bind()
+    daemon.server_activate()
+    
     try:
         print('\nYour server is ready at :%s'%PORT)
         daemon.serve_forever()
