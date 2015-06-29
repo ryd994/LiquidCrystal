@@ -8,7 +8,6 @@ from config import PORT
 import connect
 import post
 import socket
-import sys
 
 class LiquidHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
@@ -72,13 +71,38 @@ class LiquidHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    daemon = SocketServer.ThreadingTCPServer(('127.0.0.1',PORT),LiquidHandler,bind_and_activate=False)
-    daemon.allow_reuse_address = True
+    import sys
+    from os.path import splitext,basename
+    import os
+    import errno
+    
+    pid_file = splitext(basename(__file__))[0] + '.pid'
     try:
+        with open(pid_file,'r') as f:
+            pid = int(f.read())
+            os.kill(pid,9)              #Try kill any existing
+    except (IOError,ValueError):
+        pass                            # file not exist or file empty, ignore
+    except OSError as e:
+        if hasattr(e,'winerror'):
+            if e.winerror!=87: raise    # On windows, and error is not "Process not Found"
+        elif e.errno==errno.ESRCH: raise# On UNIX, and error is not "Process not Found"
+
+    daemon = SocketServer.ThreadingTCPServer(('127.0.0.1',PORT),LiquidHandler,bind_and_activate=False)
+    try:
+        daemon.allow_reuse_address = False
         daemon.server_bind()
     except socket.error:
-        print('Can not bind to specified port')
-        sys.exit(0)
+        try:
+            daemon.allow_reuse_address = True
+            daemon.server_bind()
+        except socket.error:
+            print('Cannot bind to specified port')
+            sys.exit(0)
+    
+    with open(pid_file,'w') as f:
+        f.write(str(os.getpid()))
+    
     daemon.server_activate()
     
     try:
@@ -87,5 +111,6 @@ if __name__ == "__main__":
         daemon.serve_forever()
     except KeyboardInterrupt:
         print('Exiting...')
+        os.remove(pid_file)
         daemon.shutdown()
         sys.exit(0)
