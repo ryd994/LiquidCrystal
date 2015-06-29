@@ -7,6 +7,8 @@ import urllib3.exceptions
 from config import PORT
 import connect
 import post
+import socket
+import sys
 
 class LiquidHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
@@ -72,13 +74,17 @@ class LiquidHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 if __name__ == "__main__":
     daemon = SocketServer.ThreadingTCPServer(('127.0.0.1',PORT),LiquidHandler,bind_and_activate=False)
     daemon.allow_reuse_address = True
-    daemon.server_bind()
+    try:
+        daemon.server_bind()
+    except socket.error:
+        print('Can not bind to specified port')
+        sys.exit(0)
     daemon.server_activate()
     
     try:
-        print('\nYour server is ready at :%s'%PORT)
+        print('Your server is ready at :%s'%PORT)
         daemon.serve_forever()
     except KeyboardInterrupt:
-        print('\nExiting...')
+        print('Exiting...')
         daemon.shutdown()
-        exit()
+        sys.exit(0)
