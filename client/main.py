@@ -83,6 +83,7 @@ if __name__ == "__main__":
     
     try:
         print('Your server is ready at :%s'%PORT)
+        sys.stdout.flush()
         daemon.serve_forever()
     except KeyboardInterrupt:
         print('Exiting...')
