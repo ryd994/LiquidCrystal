@@ -86,7 +86,7 @@ if __name__ == "__main__":
     except OSError as e:
         if hasattr(e,'winerror'):
             if e.winerror!=87: raise    # On windows, and error is not "Process not Found"
-        elif e.errno==errno.ESRCH: raise# On UNIX, and error is not "Process not Found"
+        elif e.errno!=errno.ESRCH: raise# On UNIX, and error is not "Process not Found"
 
     daemon = SocketServer.ThreadingTCPServer(('127.0.0.1',PORT),LiquidHandler,bind_and_activate=False)
     try:
