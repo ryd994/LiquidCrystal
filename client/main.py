@@ -1,13 +1,14 @@
 #!/usr/bin/python3
 
+import socket
 import SocketServer
 import BaseHTTPServer
 import urllib3.exceptions
 
-from config import PORT
+import config
 import connect
 import post
-import socket
+
 
 class LiquidHandler(BaseHTTPServer.BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
@@ -25,6 +26,24 @@ class LiquidHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             self.wfile.write("%s %d %s\r\n" %
                             (self.protocol_version, code, message))
     
+    '''
+    do_*() is called when request mathod matches
+    
+    To simplify main.py, actual implement is done in (method).py . For short, main.py 
+    controls response code, headers and logging, while (method).py prepares response and
+    sends content.
+    
+    All operation performed before any data sent to client is handled by (method).connect() .
+    Exceptions are allowed in (method).connect(), they will be converted to appropriate 
+    HTTP status code and response. If no error occured, (method).connect() shoudl return 
+    a (response) to be passed to (method).content()
+    
+    All operation after status code and headers sent are handled by (method).content() .
+    (method).content() should not throw exceptions, any exception will abort processing 
+    immediately and connection will be closed. (method).content() should return byte count
+    and/or other info for logging.
+    
+    '''
     def do_CONNECT(self):
         try:
             socket_toremote = connect.connect(self.path)
@@ -55,7 +74,7 @@ class LiquidHandler(BaseHTTPServer.BaseHTTPRequestHandler):
             self.send_response(502)
             self.end_headers()
             self.close_connection = 1
-            raise
+            return
         
         self.send_response_only(response.status)
         for k,v in response.headers.items():
@@ -65,8 +84,7 @@ class LiquidHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         byte_count = post.content(self.wfile, response)
         
         self.log_request(response.status, byte_count)
-    
-    
+        
     do_OPTIONS = do_GET = do_HEAD = do_DELETE = do_PUT = do_POST
 
 
@@ -74,43 +92,41 @@ if __name__ == "__main__":
     import sys
     from os.path import splitext,basename
     import os
-    import errno
+    import signal
+    import argparse
     
-    pid_file = splitext(basename(__file__))[0] + '.pid'
-    try:
-        with open(pid_file,'r') as f:
-            pid = int(f.read())
-            os.kill(pid,9)              #Try kill any existing
-    except (IOError,ValueError):
-        pass                            # file not exist or file empty, ignore
-    except OSError as e:
-        if hasattr(e,'winerror'):
-            if e.winerror!=87: raise    # On windows, and error is not "Process not Found"
-        elif e.errno!=errno.ESRCH: raise# On UNIX, and error is not "Process not Found"
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--port','-p',type=int,dest='PORT',help='listening port number')
+    parser.add_argument('--timeout','-t',type=int,dest='TIMEOUT',help='timout for connecting')
+    parser.add_argument('--api-server','-as',dest='API_SERVER',help='server for game api operations')
+    parser.add_argument('--cache-server','-cs',dest='CACHE_SERVER',help='server for game resources')
 
-    daemon = SocketServer.ThreadingTCPServer(('127.0.0.1',PORT),LiquidHandler,bind_and_activate=False)
-    try:
+    parser.parse_args(namespace=config)
+    
+    daemon = SocketServer.ThreadingTCPServer(('127.0.0.1',config.PORT),LiquidHandler,bind_and_activate=False)
+    daemon.daemon_threads = True
+
+    # OS-specific settings
+    if os.name == 'posix':
+        # TIME_WAIT bind fail workaround in linux
+        daemon.allow_reuse_address = True
+    elif os.name == 'nt':
+        # Windows has different behavior on SO_REUSEADDR, don't use this options on Windows
         daemon.allow_reuse_address = False
-        daemon.server_bind()
-    except socket.error:
-        try:
-            daemon.allow_reuse_address = True
-            daemon.server_bind()
-        except socket.error:
-            print('Cannot bind to specified port')
-            sys.exit(0)
-    
-    with open(pid_file,'w') as f:
-        f.write(str(os.getpid()))
-    
-    daemon.server_activate()
+    # Not sure with other OS, open a ticket if you can provide assistance
     
     try:
-        print('Your server is ready at :%s'%PORT)
-        sys.stdout.flush()
+        daemon.server_bind()
+        daemon.server_activate()    
+    except socket.error:
+        print('Cannot bind to specified port')
+        exit(65)
+    
+    print('Your server is ready at :%s'%config.PORT)
+    sys.stdout.flush()
+    
+    try:
         daemon.serve_forever()
     except KeyboardInterrupt:
         print('Exiting...')
-        os.remove(pid_file)
-        daemon.shutdown()
-        sys.exit(0)
+        exit(0)

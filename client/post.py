@@ -8,14 +8,11 @@ from urlparse import urlsplit,urlunsplit,parse_qs
 from datetime import datetime
 from time import time
 
+import config
 
-from config import TIMEOUT,BLOCK_SIZE,API_SERVER,CACHE_SERVER
 
-
-RETRIES         = 3
+RETRIES         = 5
 API_PROTOCOL    = 'http'
-API_PATTERN     = '^http://(125\.6\.18(4\.(15|16)|7\.(205|229|253)|8\.25|9\.(7|39|71|103|135|167|215|247))|203\.104\.(105\.167|209\.(7|71|23|39|55)|248\.135)|222\.158\.206\.145)/kcsapi/.*'
-CACHE_PATTERN   = '^http://(125\.6\.18(4\.(15|16)|7\.(205|229|253)|8\.25|9\.(7|39|71|103|135|167|215|247))|203\.104\.(105\.167|209\.(7|71|23|39|55)|248\.135)|222\.158\.206\.145)/kcs/.*'
 MIME_DICT       = {
     'jpg':'image/jpeg',
     'mp3':'audio/mpeg',
@@ -35,6 +32,24 @@ class DummyResponse:
     def tell(self):
         return len(self.data)
     
+def is_api(path):
+    API_PATTERN     = '^http://(125\.6\.18(4\.(15|16)|7\.(205|229|253)|8\.25|9\.(39|71|7|103|135|167|215|247))|203\.104\.(105\.167|209\.(71|23|39|55|102)|248\.135)|222\.158\.206\.145)/kcsapi/.*'
+    if re.match(API_PATTERN, path):
+        return True
+    return False
+
+def is_cache(path):
+    CACHE_PATTERN   = '^http://(125\.6\.18(4\.(15|16)|7\.(205|229|253)|8\.25|9\.(39|71|7|103|135|167|215|247))|203\.104\.(105\.167|209\.(71|23|39|55|102)|248\.135)|222\.158\.206\.145)/kcs/.*'
+    if re.match(CACHE_PATTERN, path):
+        return True
+    return False
+
+def is_proxy(path):
+    if re.match('^http://.*\.dmm.com/.*',path):
+        return True
+    if path.startswith(('http://203.104.209.7/kcscontents/','http://203.104.209.7/gadget/')):
+        return True
+    return False
 
 def connect(self):
     request_headers = copy(self.headers)          #shallow copy
@@ -42,19 +57,19 @@ def connect(self):
     request_headers['Connection'] = 'keep-alive'
 
     
-    if re.match(API_PATTERN, self.path):
+    if is_api(self.path):
         url = urlsplit(self.path)
-        url = urlunsplit((API_PROTOCOL, API_SERVER,
-                          '/{0:.3f}/{1}{2}'.format(time(), url[1], url[2]),
-                          url[3], url[4]))
-        request_headers['Host'] = API_SERVER
+        url = urlunsplit((API_PROTOCOL, config.API_SERVER,'/'+url[1]+url[2], url[3], url[4]))
+        request_headers['Host'] = config.API_SERVER
+        request_headers['X-Crystal-Timestamp'] = '{0:.3f}'.format(time())
+
         
         response = HTTP_POOL.urlopen (
             method  = self.command,
             url     = url,
             body    = self.rfile.read( int(request_headers.get('Content-Length',0)) ) or None,
             headers = dict(request_headers.items()),
-            timeout = TIMEOUT,
+            timeout = config.TIMEOUT,
             retries = RETRIES,
             release_conn    = True,
             preload_content = True,
@@ -64,16 +79,17 @@ def connect(self):
         response.headers['Content-Length'] = len(response.data)
         response.close()
     
-    elif re.match(CACHE_PATTERN, self.path):
+    elif is_cache(self.path):
         url = urlsplit(self.path)
         query = {k.lower():v for k,v in parse_qs(url[3]).items()}
         
-        cache_name = url[2].rpartition('.')     #cache_name[2] is extension
-        hacked_path= '.'.join(('',cache_name[0],'hack',cache_name[2]))
+        cache_prefix = 'cache'
+        cache_name = url[2].partition('.')     #cache_name[2] is extension
+        hacked_path= cache_prefix + '/' + '.'.join((cache_name[0],'hack',cache_name[2]))
         
         if os.path.isfile(hacked_path): cache_path = hacked_path
-        elif 'version' in query: cache_path = '.'.join(('',cache_name[0],query['version'][0],cache_name[2]))
-        else: cache_path = '.'.join(('',cache_name[0],cache_name[2]))
+        elif 'version' in query: cache_path = cache_prefix + '/' + '.'.join((cache_name[0],query['version'][0],cache_name[2]))
+        else: cache_path = cache_prefix + '/' + '.'.join((cache_name[0],cache_name[2]))
         
         if os.path.isfile(cache_path):
             with open(cache_path,'rb') as cache_file:
@@ -85,13 +101,14 @@ def connect(self):
                 response.headers['Last-Modified'] = email.utils.formatdate(fileinfo.st_mtime)
                 response.data = cache_file.read()
         else:
-            url = urlunsplit(('http', CACHE_SERVER, url[2], url[3], url[4]))
+            url = urlunsplit(('http', config.CACHE_SERVER, '/'+url[1]+url[2], url[3], url[4]))
+            #request_headers['Host'] = config.CACHE_SERVER
             response = HTTP_POOL.urlopen (
                 method  = self.command,
                 url     = url,
                 body    = self.rfile.read( int(request_headers.get('Content-Length',0)) ) or None,
                 headers = dict(request_headers.items()),
-                timeout = TIMEOUT,
+                timeout = config.TIMEOUT,
                 retries = RETRIES,
                 release_conn    = True,
                 preload_content = True,
@@ -113,28 +130,43 @@ def connect(self):
             response.headers.pop('Transfer-Encoding',None)
             response.headers['Content-Length'] = len(response.data)
             response.close()    # close response so that content() can know data is preloaded
-    
+
+    elif is_proxy(self.path):
+        url = urlsplit(self.path)
+        url = urlunsplit(('http', 'super.crystalacg.com', url[2], url[3], url[4]))
+        response = HTTP_POOL.urlopen (
+            method  = self.command,
+            url     = url,
+            body    = self.rfile.read( int(request_headers.get('Content-Length',0)) ) or None,
+            headers = dict(request_headers.items()),
+            timeout = config.TIMEOUT,
+            retries = False,
+            release_conn    = False,
+            preload_content = False,
+            decode_content  = False,
+            )
+
     else:
         response = HTTP_POOL.urlopen (
             method  = self.command,
             url     = self.path,
             body    = self.rfile.read( int(request_headers.get('Content-Length',0)) ) or None,
             headers = dict(request_headers.items()),
-            timeout = TIMEOUT,
-            #retries = False,
+            timeout = config.TIMEOUT,
+            retries = False,
             release_conn    = False,
             preload_content = False,
             decode_content  = False,
             )
     
-    response.headers['Connection'] = 'keep-alive'
+    response.headers['Connection'] = 'close'
     return response
 
 def content(wfile, response):
     if response.closed:
         wfile.write(response.data)
     else:
-        for chunk in response.stream(BLOCK_SIZE):
+        for chunk in response.stream(config.BLOCK_SIZE):
             try:
                 if response.chunked:
                     wfile.write( ('%x\r\n'%len(chunk)).encode('iso-8859-1') + chunk + b'\r\n' )
@@ -145,4 +177,5 @@ def content(wfile, response):
                 break
         if response.chunked:
             wfile.write(b'0\r\n\r\n')
+    wfile.flush()
     return response.tell()
